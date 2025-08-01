@@ -5,9 +5,13 @@ from flask import Flask
 from threading import Thread
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
+import json
 
 # -------- Конфиг --------
-TOKEN = os.getenv("TOKEN")
+TOKEN = os.getenv("TOKEN2")
+HF_API_TOKEN = os.getenv("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")  # Токен Hugging Face
+HF_MODEL = "microsoft/DialoGPT-medium"   # Модель Hugging Face
+
 app = ApplicationBuilder().token(TOKEN).build()
 
 # -------- Ютилиты --------
@@ -144,11 +148,6 @@ def L(u):
 favs = {}
 
 # --------- Hugging Face simple crypto response ---------
-import json
-
-HF_API_TOKEN = os.getenv("HF_API_TOKEN")  # Добавь свой Hugging Face API токен в переменные окружения Replit
-HF_MODEL = "microsoft/DialoGPT-medium"   # Можно заменить модель, если хочешь
-
 async def hf_query(prompt: str) -> str:
     headers = {
         "Authorization": f"Bearer {HF_API_TOKEN}",
@@ -163,7 +162,6 @@ async def hf_query(prompt: str) -> str:
         r = requests.post(f"https://api-inference.huggingface.co/models/{HF_MODEL}", headers=headers, data=json.dumps(payload), timeout=10)
         r.raise_for_status()
         data = r.json()
-        # Ответ модели в поле 'generated_text' или в первой ячейке, зависит от модели
         if isinstance(data, dict) and "error" in data:
             return "🤖 Извините, я сейчас не могу ответить."
         if isinstance(data, list) and len(data) > 0 and "generated_text" in data[0]:
@@ -171,7 +169,7 @@ async def hf_query(prompt: str) -> str:
         if isinstance(data, dict) and "generated_text" in data:
             return data["generated_text"]
         return "🤖 Извините, я сейчас не могу ответить."
-    except Exception as e:
+    except Exception:
         return "🤖 Извините, я сейчас не могу ответить."
 
 # ---------- Handlers ----------
@@ -235,20 +233,18 @@ async def fav_cmd(u: Update, _):
 # --------- Новый handler для автоответа через HF -----------
 async def message_handler(u: Update, _):
     text = u.message.text
-    # Игнорируем команды, только обычные сообщения
     if text.startswith("/"):
         return
-    # Отвечаем только если в сообщении есть слово "крипт" или "crypto" (чтобы не спамить на всё подряд)
+    # Отвечаем только если есть слова крипта и др
     if not any(k in text.lower() for k in ["крипт", "crypto", "btc", "eth", "sol", "ada", "doge"]):
         return
     answer = await hf_query(text)
-    # Добавим ссылку внизу с HTML тегом <a> с невидимой надписью
     tg_channel_url = "https://t.me/+dVqwFKDm3K83ZDli"
     footer = f'\n\n<a href="{tg_channel_url}">&#8205;ТГК админа (подписка по желанию)</a>'
     try:
         await u.message.reply_text(answer + footer, parse_mode="HTML", disable_web_page_preview=True)
     except:
-        await u.message.reply_text(answer)  # на всякий случай без HTML
+        await u.message.reply_text(answer)
 
 # ---------- Keep-alive Flask для UptimeRobot ----------
 keep_alive_app = Flask("")
@@ -271,7 +267,6 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("fav_remove", fav_remove))
     app.add_handler(CommandHandler("fav", fav_cmd))
 
-    # Добавляем обработчик обычных сообщений для автоответа
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), message_handler))
 
     print("🚀 Бот запущен и работает 24/7 на Replit!")
