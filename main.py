@@ -9,7 +9,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 # -------- Конфиг --------
 TOKEN = os.getenv("TOKEN")
-YOUR_ADMIN_ID = 123456789  # <- Заменить на твой Telegram ID
+YOUR_ADMIN_ID = 7900568062:AAHD10yXTiH75X7X1wt7lE1km4qXiwpRTgU
 app = ApplicationBuilder().token(TOKEN).build()
 
 # -------- Сохранение статистики пользователей --------
