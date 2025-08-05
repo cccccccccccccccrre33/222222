@@ -4,13 +4,12 @@ import asyncio
 import requests
 from flask import Flask
 from threading import Thread
-from telegram import Update, BotCommand
-from telegram.constants import BotCommandScopeChat, BotCommandScopeDefault
+from telegram import Update, BotCommand, BotCommandScope
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 # -------- Конфиг --------
 TOKEN = os.getenv("TOKEN")
-YOUR_ADMIN_ID = 1282313394 
+YOUR_ADMIN_ID = 1282313394 # ⚠️ Заменить на свой Telegram ID
 app = ApplicationBuilder().token(TOKEN).build()
 
 # -------- Сохранение пользователей --------
@@ -229,7 +228,7 @@ async def set_commands():
         BotCommand("fav_add", "Add to fav"),
         BotCommand("fav_remove", "Remove from fav"),
         BotCommand("stats", "Bot stats"),
-    ], scope=BotCommandScopeChat(chat_id=YOUR_ADMIN_ID))
+    ], scope=BotCommandScope(type="chat", chat_id=YOUR_ADMIN_ID))
 
     await app.bot.set_my_commands([
         BotCommand("start", "Start"),
@@ -238,7 +237,7 @@ async def set_commands():
         BotCommand("fav", "Favorites"),
         BotCommand("fav_add", "Add to fav"),
         BotCommand("fav_remove", "Remove from fav"),
-    ], scope=BotCommandScopeDefault())
+    ], scope=BotCommandScope(type="default"))
 
 # -------- Keep-alive --------
 keep_alive_app = Flask("")
@@ -265,4 +264,3 @@ if __name__ == "__main__":
     print("🚀 Бот запущен!")
     asyncio.run(set_commands())
     app.run_polling()
-
