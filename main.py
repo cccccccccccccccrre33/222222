@@ -1,14 +1,32 @@
 import os
+import json
 import asyncio
 import requests
 from flask import Flask
 from threading import Thread
-from telegram import Update
+from telegram import Update, BotCommand
+from telegram.constants import BotCommandScopeChat, BotCommandScopeDefault
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 # -------- Конфиг --------
 TOKEN = os.getenv("TOKEN")
+YOUR_ADMIN_ID = 123456789  # ⚠️ ЗАМЕНИ на свой Telegram ID
 app = ApplicationBuilder().token(TOKEN).build()
+
+# -------- Сохранение пользователей --------
+USERS_FILE = 'users.json'
+
+def load_users():
+    if os.path.exists(USERS_FILE):
+        with open(USERS_FILE, 'r') as f:
+            return set(json.load(f))
+    return set()
+
+def save_users(users):
+    with open(USERS_FILE, 'w') as f:
+        json.dump(list(users), f)
+
+users = load_users()
 
 # -------- Ютилиты --------
 def fmt_price(p):
@@ -18,7 +36,7 @@ def fmt_price(p):
 
 def pct(x): return f"{x:+.2f}%"
 
-# -------- Получение цен --------
+# -------- Биржи --------
 def b24_binance():
     j = requests.get("https://api.binance.com/api/v3/ticker/24hr", timeout=5).json()
     return {d["symbol"][:-4]: (float(d["lastPrice"]), float(d["priceChangePercent"]))
@@ -64,7 +82,7 @@ async def unified_24h():
             pass
     return coins
 
-# -------- Тексты --------
+# -------- Языки --------
 TXT = {
     "ru": dict(
         start=(
@@ -78,28 +96,68 @@ TXT = {
             "• /fav_add btc ada — добавить\n"
             "• /fav_remove btc — удалить\n\n"
             "🔗 Сервисы\n"
-            "• <a href=\"https://www.binance.com/activity/referral-entry/CPA?ref=CPA_00POHWMMJK\">Binance</a>\n"
-            "• <a href=\"https://www.bybit.com/invite?ref=A5Y25JQ\">Bybit</a>\n"
-            "• <a href=\"https://promote.mexc.com/r/3EfAE\">MEXC</a>\n"
-            "• <a href=\"https://bingx.com/invite/MMT7KG/\">BingX</a>\n"
-            "• <a href=\"https://okx.com/join/33545594\">OKX</a>\n\n"
-            "📢 <a href=\"https://t.me/+dVqwFKDm3K83ZDli\">Наш Telegram-канал</a>"
+            "• <a href=\"https://www.binance.com\">Binance</a>\n"
+            "• <a href=\"https://www.bybit.com\">Bybit</a>\n"
+            "• <a href=\"https://www.mexc.com\">MEXC</a>\n"
+            "• <a href=\"https://bingx.com\">BingX</a>\n"
+            "• <a href=\"https://okx.com\">OKX</a>\n\n"
+            "📢 <a href=\"https://t.me/yourchannel\">Наш Telegram-канал</a>"
         ),
         hdr="💰 Цены:", none="❌ нет данных",
         fav_empty="⚠️ Список избранного пуст.",
         top_gain="📈 <b>Топ 5 рост 24ч:</b>",
         top_loss="📉 <b>Топ 5 падение 24ч:</b>"
+    ),
+    "uk": dict(
+        start=(
+            "🔥 Crypto Bot — помічник на крипторинку\n\n"
+            "📌 Швидкі команди\n"
+            "• /price — миттєво: BTC ETH SOL\n"
+            "• /price btc ada doge — ціни будь-яких монет\n"
+            "• /top — топ 5 зростання / падіння (24г)\n\n"
+            "⭐️ Обране\n"
+            "• /fav — показати список\n"
+            "• /fav_add btc ada — додати\n"
+            "• /fav_remove btc — видалити\n\n"
+            "📢 <a href=\"https://t.me/yourchannel\">Наш Telegram-канал</a>"
+        ),
+        hdr="💰 Ціни:", none="❌ немає даних",
+        fav_empty="⚠️ Список обраного порожній.",
+        top_gain="📈 <b>Топ 5 зростання 24г:</b>",
+        top_loss="📉 <b>Топ 5 падіння 24г:</b>"
+    ),
+    "en": dict(
+        start=(
+            "🔥 Crypto Bot — crypto market assistant\n\n"
+            "📌 Quick commands\n"
+            "• /price — instantly: BTC ETH SOL\n"
+            "• /price btc ada doge — any coin prices\n"
+            "• /top — top 5 gainers / losers (24h)\n\n"
+            "⭐️ Favorites\n"
+            "• /fav — show list\n"
+            "• /fav_add btc ada — add\n"
+            "• /fav_remove btc — remove\n\n"
+            "📢 <a href=\"https://t.me/yourchannel\">Our Telegram Channel</a>"
+        ),
+        hdr="💰 Prices:", none="❌ no data",
+        fav_empty="⚠️ Favorites list is empty.",
+        top_gain="📈 <b>Top 5 gainers (24h):</b>",
+        top_loss="📉 <b>Top 5 losers (24h):</b>"
     )
 }
 
 def L(u):
-    return TXT.get((u.effective_user.language_code or "ru")[:2], TXT["ru"])
+    return TXT.get((u.effective_user.language_code or "en")[:2], TXT["en"])
 
 # -------- Избранное --------
 favs = {}
 
-# -------- Handlers --------
+# -------- Команды --------
 async def start_cmd(u: Update, _):
+    uid = u.effective_user.id
+    if uid not in users:
+        users.add(uid)
+        save_users(users)
     await u.message.reply_text(L(u)["start"], parse_mode="HTML", disable_web_page_preview=True)
 
 async def price_cmd(u: Update, c: ContextTypes.DEFAULT_TYPE):
@@ -156,7 +214,33 @@ async def fav_cmd(u: Update, _):
             lines.append(f"{coin.upper():<6}: {t['none']}")
     await u.message.reply_text("\n".join(lines))
 
-# -------- Keep-alive Flask --------
+async def stats_cmd(u: Update, _):
+    if u.effective_user.id != YOUR_ADMIN_ID:
+        return await u.message.reply_text("⛔ У тебя нет доступа.")
+    await u.message.reply_text(f"👥 Всего пользователей: {len(users)}")
+
+# -------- Set Commands --------
+async def set_commands():
+    await app.bot.set_my_commands([
+        BotCommand("start", "Start"),
+        BotCommand("price", "Coin prices"),
+        BotCommand("top", "Top movers"),
+        BotCommand("fav", "Favorites"),
+        BotCommand("fav_add", "Add to fav"),
+        BotCommand("fav_remove", "Remove from fav"),
+        BotCommand("stats", "Bot stats"),
+    ], scope=BotCommandScopeChat(chat_id=YOUR_ADMIN_ID))
+
+    await app.bot.set_my_commands([
+        BotCommand("start", "Start"),
+        BotCommand("price", "Coin prices"),
+        BotCommand("top", "Top movers"),
+        BotCommand("fav", "Favorites"),
+        BotCommand("fav_add", "Add to fav"),
+        BotCommand("fav_remove", "Remove from fav"),
+    ], scope=BotCommandScopeDefault())
+
+# -------- Keep-alive --------
 keep_alive_app = Flask("")
 
 @keep_alive_app.route("/")
@@ -173,10 +257,12 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("start", start_cmd))
     app.add_handler(CommandHandler("price", price_cmd))
     app.add_handler(CommandHandler("top", top_cmd))
+    app.add_handler(CommandHandler("fav", fav_cmd))
     app.add_handler(CommandHandler("fav_add", fav_add))
     app.add_handler(CommandHandler("fav_remove", fav_remove))
-    app.add_handler(CommandHandler("fav", fav_cmd))
+    app.add_handler(CommandHandler("stats", stats_cmd))
 
-    print("🚀 Бот запущен и работает 24/7!")
+    print("🚀 Бот запущен!")
+    asyncio.run(set_commands())
     app.run_polling()
 
