@@ -4,36 +4,27 @@ import asyncio
 import requests
 from flask import Flask
 from threading import Thread
-from telegram import Update, BotCommand, BotCommandScope
+from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 # -------- Конфиг --------
 TOKEN = os.getenv("TOKEN")
-YOUR_ADMIN_ID = 1282313394
 app = ApplicationBuilder().token(TOKEN).build()
 
-# -------- Сохранение статистики пользователей --------
+# -------- Сохранение пользователей --------
 USERS_FILE = 'users.json'
 
 def load_users():
     if os.path.exists(USERS_FILE):
         with open(USERS_FILE, 'r') as f:
-            return json.load(f)  # словарь { user_id(str): count(int) }
-    return {}
+            return set(json.load(f))
+    return set()
 
 def save_users(users):
     with open(USERS_FILE, 'w') as f:
-        json.dump(users, f)
+        json.dump(list(users), f)
 
 users = load_users()
-
-def increment_user_count(user_id: int):
-    key = str(user_id)
-    users[key] = users.get(key, 0) + 1
-    save_users(users)
-
-def get_user_count(user_id: int) -> int:
-    return users.get(str(user_id), 0)
 
 # -------- Ютилиты --------
 def fmt_price(p):
@@ -89,7 +80,7 @@ async def unified_24h():
             pass
     return coins
 
-# -------- Тексты --------
+# -------- Языки --------
 TXT = {
     "ru": dict(
         start=(
@@ -113,8 +104,7 @@ TXT = {
         hdr="💰 Цены:", none="❌ нет данных",
         fav_empty="⚠️ Список избранного пуст.",
         top_gain="📈 <b>Топ 5 рост 24ч:</b>",
-        top_loss="📉 <b>Топ 5 падение 24ч:</b>",
-        stats="ℹ️ Ты использовал бота <b>{count}</b> раз(а)."
+        top_loss="📉 <b>Топ 5 падение 24ч:</b>"
     ),
     "uk": dict(
         start=(
@@ -132,8 +122,7 @@ TXT = {
         hdr="💰 Ціни:", none="❌ немає даних",
         fav_empty="⚠️ Список обраного порожній.",
         top_gain="📈 <b>Топ 5 зростання 24г:</b>",
-        top_loss="📉 <b>Топ 5 падіння 24г:</b>",
-        stats="ℹ️ Ви використовували бота <b>{count}</b> раз(и)."
+        top_loss="📉 <b>Топ 5 падіння 24г:</b>"
     ),
     "en": dict(
         start=(
@@ -151,30 +140,24 @@ TXT = {
         hdr="💰 Prices:", none="❌ no data",
         fav_empty="⚠️ Favorites list is empty.",
         top_gain="📈 <b>Top 5 gainers (24h):</b>",
-        top_loss="📉 <b>Top 5 losers (24h):</b>",
-        stats="ℹ️ You have used the bot <b>{count}</b> times."
+        top_loss="📉 <b>Top 5 losers (24h):</b>"
     )
 }
 
 def L(u):
-    return TXT.get((u.effective_user.language_code or "en")[:2], TXT["en"])
+    return TXT.get((u.effective_user.language_code or "ru")[:2], TXT["ru"])
 
 # -------- Избранное --------
 favs = {}
 
-# -------- Обертка для команд чтобы считать использование --------
-def count_usage(func):
-    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        increment_user_count(update.effective_user.id)
-        return await func(update, context)
-    return wrapper
-
-# -------- Команды --------
-@count_usage
+# -------- Handlers --------
 async def start_cmd(u: Update, _):
+    uid = u.effective_user.id
+    if uid not in users:
+        users.add(uid)
+        save_users(users)
     await u.message.reply_text(L(u)["start"], parse_mode="HTML", disable_web_page_preview=True)
 
-@count_usage
 async def price_cmd(u: Update, c: ContextTypes.DEFAULT_TYPE):
     t = L(u)
     coins = c.args or ["BTC", "ETH", "SOL"]
@@ -188,7 +171,6 @@ async def price_cmd(u: Update, c: ContextTypes.DEFAULT_TYPE):
             out.append(f"{coin.upper():<6}: {t['none']}")
     await u.message.reply_text("\n".join(out))
 
-@count_usage
 async def top_cmd(u: Update, _):
     t = L(u)
     data = await unified_24h()
@@ -202,14 +184,12 @@ async def top_cmd(u: Update, _):
         lines.append(f"{n:<6} {pct(ch):>7}  ${fmt_price(p)}")
     await u.message.reply_text("\n".join(lines), parse_mode="HTML")
 
-@count_usage
 async def fav_add(u: Update, c):
     if not c.args:
         return await u.message.reply_text("Usage: /fav_add btc ada")
     favs.setdefault(u.effective_user.id, set()).update(a.lower() for a in c.args)
     await u.message.reply_text("✅ added")
 
-@count_usage
 async def fav_remove(u: Update, c):
     if not c.args:
         return await u.message.reply_text("Usage: /fav_remove btc ada")
@@ -218,7 +198,6 @@ async def fav_remove(u: Update, c):
         s.discard(coin.lower())
     await u.message.reply_text("✅ updated")
 
-@count_usage
 async def fav_cmd(u: Update, _):
     t = L(u)
     s = favs.get(u.effective_user.id, set())
@@ -232,33 +211,6 @@ async def fav_cmd(u: Update, _):
         else:
             lines.append(f"{coin.upper():<6}: {t['none']}")
     await u.message.reply_text("\n".join(lines))
-
-async def stats_cmd(u: Update, _):
-    if u.effective_user.id != YOUR_ADMIN_ID:
-        return await u.message.reply_text("⛔ У тебя нет доступа.")
-    count = get_user_count(u.effective_user.id)
-    await u.message.reply_text(L(u)["stats"].format(count=count), parse_mode="HTML")
-
-# -------- Set Commands --------
-async def set_commands():
-    await app.bot.set_my_commands([
-        BotCommand("start", "Start"),
-        BotCommand("price", "Coin prices"),
-        BotCommand("top", "Top movers"),
-        BotCommand("fav", "Favorites"),
-        BotCommand("fav_add", "Add to fav"),
-        BotCommand("fav_remove", "Remove from fav"),
-        BotCommand("stats", "Bot stats (only for admin)"),
-    ], scope=BotCommandScope(type="chat", chat_id=YOUR_ADMIN_ID))
-
-    await app.bot.set_my_commands([
-        BotCommand("start", "Start"),
-        BotCommand("price", "Coin prices"),
-        BotCommand("top", "Top movers"),
-        BotCommand("fav", "Favorites"),
-        BotCommand("fav_add", "Add to fav"),
-        BotCommand("fav_remove", "Remove from fav"),
-    ], scope=BotCommandScope(type="default"))
 
 # -------- Keep-alive Flask --------
 keep_alive_app = Flask("")
@@ -277,11 +229,9 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("start", start_cmd))
     app.add_handler(CommandHandler("price", price_cmd))
     app.add_handler(CommandHandler("top", top_cmd))
-    app.add_handler(CommandHandler("fav", fav_cmd))
     app.add_handler(CommandHandler("fav_add", fav_add))
     app.add_handler(CommandHandler("fav_remove", fav_remove))
-    app.add_handler(CommandHandler("stats", stats_cmd))
+    app.add_handler(CommandHandler("fav", fav_cmd))
 
     print("🚀 Бот запущен и работает 24/7!")
-    asyncio.run(set_commands())
     app.run_polling()
