@@ -9,7 +9,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 # -------- Конфиг --------
 TOKEN = os.getenv("TOKEN")
-YOUR_ADMIN_ID = 1282313394 # ⚠️ Заменить на свой Telegram ID
+YOUR_ADMIN_ID = 1282313394 
 app = ApplicationBuilder().token(TOKEN).build()
 
 # -------- Сохранение пользователей --------
@@ -250,7 +250,7 @@ def run_keep_alive():
     keep_alive_app.run(host="0.0.0.0", port=8080)
 
 # -------- MAIN --------
-if __name__ == "__main__":
+async def main():
     Thread(target=run_keep_alive).start()
 
     app.add_handler(CommandHandler("start", start_cmd))
@@ -262,5 +262,8 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("stats", stats_cmd))
 
     print("🚀 Бот запущен!")
-    asyncio.run(set_commands())
-    app.run_polling()
+    await set_commands()
+    await app.run_polling()
+
+if __name__ == "__main__":
+    asyncio.run(main())
