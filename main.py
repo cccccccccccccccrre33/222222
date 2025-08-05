@@ -89,7 +89,6 @@ async def unified_24h():
             pass
     return coins
 
-# -------- Тексты --------
 TXT = {
     "ru": dict(
         start=(
@@ -127,6 +126,12 @@ TXT = {
             "• /fav — показати список\n"
             "• /fav_add btc ada — додати\n"
             "• /fav_remove btc — видалити\n\n"
+            "🔗 Сервіси\n"
+            "• <a href=\"https://www.binance.com/activity/referral-entry/CPA?ref=CPA_00POHWMMJK\">Binance</a>\n"
+            "• <a href=\"https://www.bybit.com/invite?ref=A5Y25JQ\">Bybit</a>\n"
+            "• <a href=\"https://promote.mexc.com/r/3EfAE\">MEXC</a>\n"
+            "• <a href=\"https://bingx.com/invite/MMT7KG/\">BingX</a>\n"
+            "• <a href=\"https://okx.com/join/33545594\">OKX</a>\n\n"
             "📢 <a href=\"https://t.me/+dVqwFKDm3K83ZDli\">Наш Telegram-канал</a>"
         ),
         hdr="💰 Ціни:", none="❌ немає даних",
@@ -146,6 +151,12 @@ TXT = {
             "• /fav — show list\n"
             "• /fav_add btc ada — add\n"
             "• /fav_remove btc — remove\n\n"
+            "🔗 Services\n"
+            "• <a href=\"https://www.binance.com/activity/referral-entry/CPA?ref=CPA_00POHWMMJK\">Binance</a>\n"
+            "• <a href=\"https://www.bybit.com/invite?ref=A5Y25JQ\">Bybit</a>\n"
+            "• <a href=\"https://promote.mexc.com/r/3EfAE\">MEXC</a>\n"
+            "• <a href=\"https://bingx.com/invite/MMT7KG/\">BingX</a>\n"
+            "• <a href=\"https://okx.com/join/33545594\">OKX</a>\n\n"
             "📢 <a href=\"https://t.me/+dVqwFKDm3K83ZDli\">Our Telegram Channel</a>"
         ),
         hdr="💰 Prices:", none="❌ no data",
@@ -155,6 +166,7 @@ TXT = {
         stats="ℹ️ You have used the bot <b>{count}</b> times."
     )
 }
+
 
 def L(u):
     return TXT.get((u.effective_user.language_code or "en")[:2], TXT["en"])
